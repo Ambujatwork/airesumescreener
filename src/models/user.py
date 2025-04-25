@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from datetime import datetime
 from src.database import Base
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "users"
@@ -14,3 +15,5 @@ class User(Base):
     profile_image = Column(String, nullable=True)
     bio = Column(String, nullable=True)
 
+
+    folders = relationship("Folder", back_populates="user")

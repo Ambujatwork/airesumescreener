@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, Header
-from .routers import auth
+from .routers import auth, folders
 from .database import engine, Base
 from dotenv import load_dotenv
 import os
@@ -11,12 +11,14 @@ load_dotenv()
 # Print environment variables for debugging (remove in production)
 print(f"DATABASE_URL set: {'Yes' if os.getenv('DATABASE_URL') else 'No'}")
 print(f"SECRET_KEY set: {'Yes' if os.getenv('SECRET_KEY') else 'No'}")
+print(f"MONGO_URL set: {'Yes' if os.getenv('MONGO_URL') else 'No'}")
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 app.include_router(auth.router)
+app.include_router(folders.router)
 
 @app.get("/")
 def read_root():

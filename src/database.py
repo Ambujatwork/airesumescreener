@@ -39,6 +39,8 @@ else:
     
     DATABASE_URL = f"postgresql://{db_user}:{db_password}@{db_host}:5432/{db_name}"
 
+print(f"Using DATABASE_URL: {DATABASE_URL}")
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

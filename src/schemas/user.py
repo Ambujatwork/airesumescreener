@@ -21,7 +21,11 @@ class UserInDB(UserBase):
         orm_mode = True
 
 class User(UserInDB):
-    pass
+    bio: Optional[str] = None
+    profile_image: Optional[str] = None
+
+    class Config:
+        orm_mode = True
 
 class UserPasswordUpdate(BaseModel):
     old_password: str

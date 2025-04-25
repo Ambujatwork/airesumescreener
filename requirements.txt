@@ -9,3 +9,5 @@ psycopg2-binary
 pydantic[email]
 alembic
 bcrypt>=4.0.1
+motor
+pymongo
