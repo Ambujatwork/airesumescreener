@@ -14,6 +14,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     profile_image = Column(String, nullable=True)
     bio = Column(String, nullable=True)
+    
 
 
     folders = relationship("Folder", back_populates="user")
+    jobs = relationship("Job", back_populates = 'user')

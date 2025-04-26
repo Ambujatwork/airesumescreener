@@ -10,6 +10,11 @@ from ..schemas.folder import FolderCreate, Folder
 from ..schemas.resume import Resume
 from ..crud.folder import create_folder, get_folders_by_user, get_folder, delete_folder
 from ..crud.resume import create_resume, get_resumes_by_folder
+from src.services.text_parser import TextParser
+
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/folders",
@@ -66,32 +71,47 @@ async def upload_resume_to_folder(
     folder = get_folder(db, folder_id, current_user.id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    
-    # Read file content
-    allowed_extensions = ["pdf", "docx", "txt"]
-    if not file.filename.split(".")[-1] in allowed_extensions:
-        raise HTTPException(status_code=400, detail="Invalid file type")
 
-    content = await file.read()
-    
-    # Parse metadata if provided
-    parsed_metadata = None
-    if metadata:
-        try:
-            parsed_metadata = json.loads(metadata)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid metadata format")
-    
+    # Read file content
+    try:
+        content = await file.read()
+        content_text = content.decode("utf-8", errors="replace")  # More robust decoding
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
+
+    # Parse resume content using TextParser
+    try:
+        parser = TextParser()  # Use the singleton instance
+        parsed_metadata = parser.parse_text(content_text, parse_type="resume")
+        
+        if not parsed_metadata:
+            # Fallback to empty structure if parsing fails
+            parsed_metadata = {
+                "personal_info": {},
+                "skills": {"technical": [], "soft": []},
+                "experience": [],
+                "education": []
+            }
+    except Exception as e:
+        # Log the error but continue with empty metadata
+        logger.error(f"Resume parsing error: {str(e)}")
+        parsed_metadata = {
+            "personal_info": {},
+            "skills": {"technical": [], "soft": []},
+            "experience": [],
+            "education": []
+        }
+
     # Create resume
     resume = await create_resume(
-        db, 
-        folder_id, 
-        current_user.id, 
-        file.filename, 
+        db,
+        folder_id,
+        current_user.id,
+        file.filename,
         content,
         parsed_metadata
     )
-    
+
     return resume
 
 @router.get("/{folder_id}/resumes", response_model=List[Resume])

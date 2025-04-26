@@ -18,14 +18,14 @@ class UserInDB(UserBase):
 
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class User(UserInDB):
     bio: Optional[str] = None
     profile_image: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserPasswordUpdate(BaseModel):
     old_password: str
@@ -42,5 +42,5 @@ class UserRead(UserBase):
     is_active: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
     
