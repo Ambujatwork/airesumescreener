@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import json
+import traceback
+from fastapi.responses import JSONResponse
 
 from ..database import get_db
 from ..models.user import User
@@ -11,6 +13,7 @@ from ..schemas.resume import Resume
 from ..crud.folder import create_folder, get_folders_by_user, get_folder, delete_folder
 from ..crud.resume import create_resume, get_resumes_by_folder
 from src.services.text_parser import TextParser
+from src.services.text_extractor import TextExtractor
 
 
 import logging
@@ -59,60 +62,59 @@ async def delete_folder_by_id(
         raise HTTPException(status_code=404, detail="Folder not found")
     return {"message": "Folder deleted successfully"}
 
-@router.post("/{folder_id}/upload_resume", response_model=Resume)
-async def upload_resume_to_folder(
+
+@router.post("/{folder_id}/upload_resumes", response_model=List[Resume])
+async def upload_resumes_to_folder(
     folder_id: int,
-    file: UploadFile = File(...),
-    metadata: Optional[str] = Form(None),
+    files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Verify folder exists and belongs to user
     folder = get_folder(db, folder_id, current_user.id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    # Read file content
-    try:
-        content = await file.read()
-        content_text = content.decode("utf-8", errors="replace")  # More robust decoding
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
+    parser = TextParser()
+    uploaded_resumes = []
 
-    # Parse resume content using TextParser
-    try:
-        parser = TextParser()  # Use the singleton instance
-        parsed_metadata = parser.parse_text(content_text, parse_type="resume")
-        
-        if not parsed_metadata:
-            # Fallback to empty structure if parsing fails
-            parsed_metadata = {
-                "personal_info": {},
-                "skills": {"technical": [], "soft": []},
-                "experience": [],
-                "education": []
-            }
-    except Exception as e:
-        # Log the error but continue with empty metadata
-        logger.error(f"Resume parsing error: {str(e)}")
-        parsed_metadata = {
-            "personal_info": {},
-            "skills": {"technical": [], "soft": []},
-            "experience": [],
-            "education": []
-        }
+    for file in files:
+        try:
+            extracted_text = await TextExtractor.extract_text(file)
 
-    # Create resume
-    resume = await create_resume(
-        db,
-        folder_id,
-        current_user.id,
-        file.filename,
-        content,
-        parsed_metadata
-    )
+            if not extracted_text:
+                logger.warning(f"Empty or invalid file: {file.filename}")
+                continue
 
-    return resume
+            parsed_metadata = parser.parse_text(extracted_text, parse_type="resume") or {}
+
+            candidate_name = parsed_metadata.get("personal_info", {}).get("name") or "Unknown"
+            candidate_email = parsed_metadata.get("personal_info", {}).get("email") or ""
+
+            skills = parsed_metadata.get("skills", [])
+            if not skills:
+                skills = parsed_metadata.get("technical_skills", []) + parsed_metadata.get("tools", [])
+
+            file_content = await file.read()
+
+            resume = await create_resume(
+                db, folder_id, current_user.id, file.filename,
+                file_content,
+                {
+                    "parsed_metadata": parsed_metadata,
+                    "candidate_name": candidate_name,
+                    "candidate_email": candidate_email,
+                    "skills": skills
+                    
+                }
+            )
+            uploaded_resumes.append(resume)
+
+        except Exception as e:
+            logger.error(f"Failed to upload {file.filename}: {str(e)}")
+            continue
+
+    return uploaded_resumes
+
 
 @router.get("/{folder_id}/resumes", response_model=List[Resume])
 async def get_resumes_in_folder(
@@ -120,9 +122,8 @@ async def get_resumes_in_folder(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Verify folder exists and belongs to user
     folder = get_folder(db, folder_id, current_user.id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    
+
     return get_resumes_by_folder(db, folder_id, current_user.id)

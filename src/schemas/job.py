@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-
+from typing import Dict, Any
 class JobBase(BaseModel):
     title: str
     description: str

@@ -19,6 +19,7 @@ class Resume(ResumeBase):
     skills: Optional[List[str]] = None
     education: Optional[List[Dict[str, Any]]] = None
     experience: Optional[List[Dict[str, Any]]] = None
+    parsed_metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
 
     class Config:

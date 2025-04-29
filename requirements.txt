@@ -14,3 +14,7 @@ pymongo
 openai
 requests
 tenacity
+charset-normalizer
+pdfplumber
+python-docx
+regex

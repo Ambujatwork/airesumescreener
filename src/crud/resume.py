@@ -26,11 +26,12 @@ async def create_resume(
         folder_id=folder_id,
         user_id=user_id,
         mongo_id=str(mongo_result.inserted_id),
-        candidate_name=metadata.get("name") if metadata else None,
-        candidate_email=metadata.get("email") if metadata else None,
-        skills=metadata.get("skills") if metadata else None,
+        candidate_name=metadata.get("personal_info", {}).get("name") if metadata else None,
+        candidate_email=metadata.get("personal_info", {}).get("email") if metadata else None,
+        skills=metadata.get("skills") if metadata else None, 
         education=metadata.get("education") if metadata else None,
-        experience=metadata.get("experience") if metadata else None
+        experience=metadata.get("experience") if metadata else None,
+        parsed_metadata = metadata
     )
     
     db.add(db_resume)

@@ -19,6 +19,8 @@ class Resume(Base):
     skills = Column(JSON, nullable=True)
     education = Column(JSON, nullable=True)
     experience = Column(JSON, nullable=True)
-    
+    parsed_metadata = Column(JSON, nullable=True)  
+
+
     folder = relationship("Folder", back_populates="resumes")
     user = relationship("User")
