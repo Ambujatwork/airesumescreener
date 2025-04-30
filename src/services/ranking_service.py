@@ -128,7 +128,7 @@ def rank_resumes_by_job_metadata(resumes: List[Resume], job_description: str) ->
             resume_skills = extract_skills_from_resume(resume)
         
         # Calculate match score
-        match_score = calculate_match_score(resume_skills, job_skills)
+        match_score = calculate_composite_match_score(resume, job_metadata)
 
         # Add match score to resume metadata for reference
         setattr(resume, "match_score", match_score)
@@ -138,24 +138,46 @@ def rank_resumes_by_job_metadata(resumes: List[Resume], job_description: str) ->
     sorted_resumes = [r[0] for r in sorted(scored_resumes, key=lambda x: x[1], reverse=True)]
     return sorted_resumes
 
-def calculate_match_score(resume_skills: List[str], job_skills: List[str]) -> float:
-    """Calculate a match score between resume skills and job skills."""
-    if not job_skills or not resume_skills:
-        return 0.0
+def calculate_composite_match_score(resume: Resume, job_metadata: dict) -> float:
+    score = 0.0
+    weights = {
+        "skills": 0.4,
+        "experience": 0.3,
+        "education": 0.2,
+        "title": 0.1
+    }
 
-    # Normalize skills to lowercase for comparison
-    resume_skills_lower = [skill.lower() for skill in resume_skills if skill]
-    job_skills_lower = [skill.lower() for skill in job_skills if skill]
-    
-    if not job_skills_lower:
-        return 0.0
+    resume_metadata = resume.parsed_metadata or {}
 
-    # Count matching skills
-    matching_skills = set(resume_skills_lower).intersection(set(job_skills_lower))
+    resume_skills = extract_skills_from_resume(resume)
+    job_skills = extract_skills_from_job(job_metadata)
 
-    # Calculate score as percentage of required skills matched
-    match_percentage = len(matching_skills) / len(job_skills_lower) * 100
-    return match_percentage
+    # Skills score
+    skills_match = len(set(resume_skills).intersection(set(job_skills))) / max(len(job_skills), 1)
+
+    # Experience score
+    resume_exp = resume.experience or resume_metadata.get("experience", [])
+    job_exp = job_metadata.get("experience", [])
+    experience_match = experience_overlap_score(resume_exp, job_exp)
+
+    # Education score
+    resume_edu = resume.education or resume_metadata.get("education", [])
+    job_edu = job_metadata.get("education", [])
+    education_match = education_overlap_score(resume_edu, job_edu)
+
+    # Job title score
+    resume_titles = [e.get("job_title", "").lower() for e in resume_exp if isinstance(e, dict)]
+    job_title = (job_metadata.get("role") or "").lower()
+    title_match = 1.0 if any(job_title in title for title in resume_titles) else 0.0
+
+    score += weights["skills"] * skills_match
+    score += weights["experience"] * experience_match
+    score += weights["education"] * education_match
+    score += weights["title"] * title_match
+
+    return round(score * 100, 2)
+
+
 
 def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Optional[int] = None) -> List[Resume]:
     """
@@ -225,7 +247,9 @@ def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Op
                 if isinstance(metadata["skills"], list):
                     resume_skills = metadata["skills"]
         
-        match_score = calculate_match_score(resume_skills, job_skills)
+        job_metadata = job.job_metadata or {}
+        match_score = calculate_composite_match_score(resume, job_metadata)
+
 
         # Add match score to resume metadata for reference
         setattr(resume, "match_score", match_score)
@@ -234,3 +258,36 @@ def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Op
     # Sort resumes by match score in descending order
     sorted_resumes = [r[0] for r in sorted(scored_resumes, key=lambda x: x[1], reverse=True)]
     return sorted_resumes
+
+def experience_overlap_score(resume_exp: List[dict], job_exp: List[dict]) -> float:
+    """Check overlap in job titles and duration keywords."""
+    if not resume_exp or not job_exp:
+        return 0.0
+
+    matched = 0
+    job_titles = [j.get("job_title", "").lower() for j in job_exp if isinstance(j, dict)]
+
+    for r in resume_exp:
+        title = r.get("job_title", "").lower()
+        if title and any(jt in title for jt in job_titles):
+            matched += 1
+
+    return matched / max(len(job_exp), 1)
+
+
+def education_overlap_score(resume_edu: List[dict], job_edu: List[dict]) -> float:
+    """Check overlap in degree or field of study."""
+    if not resume_edu or not job_edu:
+        return 0.0
+
+    matched = 0
+    job_degrees = [e.get("degree", "").lower() for e in job_edu if isinstance(e, dict)]
+    job_fields = [e.get("field", "").lower() for e in job_edu if isinstance(e, dict)]
+
+    for r in resume_edu:
+        degree = r.get("degree", "").lower()
+        field = r.get("field", "").lower()
+        if degree in job_degrees or field in job_fields:
+            matched += 1
+
+    return matched / max(len(job_edu), 1)

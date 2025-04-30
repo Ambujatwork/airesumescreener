@@ -5,7 +5,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env  # Add this line to load the .env file
+      - .env  
     depends_on:
       - db
       - mongo
