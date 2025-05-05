@@ -18,3 +18,4 @@ charset-normalizer
 pdfplumber
 python-docx
 regex
+numpy

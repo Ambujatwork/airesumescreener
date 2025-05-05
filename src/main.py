@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import os
 from src.models.user import User
 from src.dependencies.security import get_current_user
-
+from src.routers import search
 load_dotenv()
 
 print(f"AZURE_OPENAI_API_KEY: {os.getenv('AZURE_OPENAI_API_KEY')}")
@@ -23,6 +23,7 @@ app = FastAPI()
 app.include_router(auth.router)
 app.include_router(folders.router)
 app.include_router(jobs.router)
+app.include_router(search.router)
 
 @app.get("/")
 def read_root():

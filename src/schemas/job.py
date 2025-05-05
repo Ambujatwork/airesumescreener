@@ -13,7 +13,7 @@ class JobCreate(JobBase):
 class Job(JobBase):
     id: int
     user_id: int
-    job_metadata: Optional[str] = None
+    job_metadata: Optional[Dict[str,Any]] = None
     created_at: datetime
 
     class Config:

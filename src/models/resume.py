@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, String,ARRAY, ForeignKey, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from src.database import Base
@@ -21,6 +21,8 @@ class Resume(Base):
     experience = Column(JSON, nullable=True)
     parsed_metadata = Column(JSON, nullable=True)  
 
+    embedding = Column(ARRAY(Float), nullable=True)
+    embedding_updated_at = Column(DateTime, nullable=True)
 
     folder = relationship("Folder", back_populates="resumes")
     user = relationship("User")
