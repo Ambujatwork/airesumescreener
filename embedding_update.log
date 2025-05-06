@@ -1,0 +1,14 @@
+2025-05-06 03:38:56,751 - __main__ - INFO - Starting embedding update process...
+2025-05-06 03:38:57,788 - embedding_generator - ERROR - Error in update_all_embeddings: When initializing mapper Mapper[Folder(folders)], expression 'User' failed to locate a name ('User'). If this is a class name, consider adding this relationship() to the <class 'src.models.folder.Folder'> class after both dependent classes have been defined.
+2025-05-06 03:38:57,790 - __main__ - INFO - Updated all embeddings: 0 successful, 0 failed, duration: 0.00s
+2025-05-06 03:38:57,790 - __main__ - INFO - Embedding update process completed in 1.04 seconds
+2025-05-06 03:47:40,218 - __main__ - INFO - Starting embedding update process...
+2025-05-06 03:47:41,381 - embedding_generator - ERROR - Error in update_all_embeddings: When initializing mapper Mapper[User(users)], expression 'Job' failed to locate a name ('Job'). If this is a class name, consider adding this relationship() to the <class 'src.models.user.User'> class after both dependent classes have been defined.
+2025-05-06 03:47:41,383 - __main__ - INFO - Updated all embeddings: 0 successful, 0 failed, duration: 0.01s
+2025-05-06 03:47:41,384 - __main__ - INFO - Embedding update process completed in 1.17 seconds
+2025-05-06 03:50:17,643 - __main__ - INFO - Starting embedding update process...
+2025-05-06 03:50:21,044 - embedding_generator - ERROR - Error in update_all_embeddings: (psycopg2.OperationalError) could not translate host name "db" to address: Name or service not known
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2025-05-06 03:50:21,045 - __main__ - INFO - Updated all embeddings: 0 successful, 0 failed, duration: 2.30s
+2025-05-06 03:50:21,045 - __main__ - INFO - Embedding update process completed in 3.40 seconds

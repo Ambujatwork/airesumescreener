@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from src.database import Base
 from sqlalchemy.dialects.postgresql import JSONB
+from src.models import User
 
 class Job(Base):
     __tablename__ = 'jobs'

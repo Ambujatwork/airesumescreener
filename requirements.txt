@@ -19,3 +19,4 @@ pdfplumber
 python-docx
 regex
 numpy
+scikit-learn

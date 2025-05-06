@@ -61,7 +61,9 @@ class TextParser:
                 "job": {
                     "system_role": "You are a professional job description parser. Extract all technical skills explicitly or implicitly mentioned.",
                     "format": {
-                        "skills": {"required": [], "preferred": []}
+                        "skills": {"required": [], "preferred": []},
+                        "location": "",
+                        "experience": {"min_years": 0}
                     }
                 }
             }

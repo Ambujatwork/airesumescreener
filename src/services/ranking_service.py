@@ -6,20 +6,20 @@ from src.schemas.resume import Resume
 from src.models.resume import Resume as ResumeModel
 from src.models.job import Job as JobModel
 from src.services.text_parser import TextParser
+from src.services.embedding_service import EmbeddingService
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
-# Configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 def extract_skills_from_resume(resume: Resume) -> List[str]:
-    """Extract all skills from a resume."""
     skills = []
     
     try:
         if not resume.metadata:
             return []
             
-        # Parse the metadata if it's a string
         metadata = resume.metadata
         if isinstance(metadata, str):
             try:
@@ -67,7 +67,7 @@ def extract_skills_from_job(job_metadata: Any) -> List[str]:
         if not job_metadata:
             return []
             
-        # Parse the metadata if it's a string
+        
         metadata = job_metadata
         if isinstance(metadata, str):
             try:
@@ -98,24 +98,22 @@ def extract_skills_from_job(job_metadata: Any) -> List[str]:
 def rank_resumes_by_job_metadata(resumes: List[Resume], job_description: str) -> List[Resume]:
     """Rank resumes based on matching with job description."""
     parser = TextParser()
+    embedding_service = EmbeddingService()  
 
-    # Parse the job description to extract required skills
     job_metadata = parser.parse_text(job_description, parse_type="job")
     job_skills = []
-    
-    # Extract skills from the job metadata
+
     if job_metadata and isinstance(job_metadata, dict) and "skills" in job_metadata:
         if isinstance(job_metadata["skills"], dict) and "required" in job_metadata["skills"]:
             job_skills = job_metadata["skills"]["required"]
         elif isinstance(job_metadata["skills"], list):
             job_skills = job_metadata["skills"]
-    
+
     if not job_skills:
         logger.warning("No job skills found in parsed metadata. Using keywords from description.")
-        # Fallback to extract important keywords from description
-        job_skills = [word.lower() for word in job_description.split() 
-                     if len(word) > 4 and word.lower() not in 
-                     ['about', 'the', 'this', 'that', 'these', 'those', 'with', 'from']]
+        job_skills = [word.lower() for word in job_description.split()
+                      if len(word) > 4 and word.lower() not in
+                      ['about', 'the', 'this', 'that', 'these', 'those', 'with', 'from']]
 
     # Score each resume
     scored_resumes = []
@@ -126,9 +124,9 @@ def rank_resumes_by_job_metadata(resumes: List[Resume], job_description: str) ->
             resume_skills = resume.skills
         else:
             resume_skills = extract_skills_from_resume(resume)
-        
+
         # Calculate match score
-        match_score = calculate_composite_match_score(resume, job_metadata)
+        match_score = calculate_composite_match_score(resume, job_metadata, embedding_service)
 
         # Add match score to resume metadata for reference
         setattr(resume, "match_score", match_score)
@@ -138,46 +136,55 @@ def rank_resumes_by_job_metadata(resumes: List[Resume], job_description: str) ->
     sorted_resumes = [r[0] for r in sorted(scored_resumes, key=lambda x: x[1], reverse=True)]
     return sorted_resumes
 
-def calculate_composite_match_score(resume: Resume, job_metadata: dict) -> float:
+def calculate_composite_match_score(resume: Resume, job_metadata: dict, embedding_service: EmbeddingService) -> float:
+    """
+    Calculate a composite match score based on skills, experience, education, title, and location,
+    including semantic similarity.
+    """
     score = 0.0
     weights = {
-        "skills": 0.4,
+        "skills": 0.3,
         "experience": 0.3,
-        "education": 0.2,
-        "title": 0.1
+        "education": 0.1,
+        "title": 0.2,
+        "location": 0.2
     }
 
     resume_metadata = resume.parsed_metadata or {}
 
+    # Skills Match
     resume_skills = extract_skills_from_resume(resume)
     job_skills = extract_skills_from_job(job_metadata)
-
-    # Skills score
     skills_match = len(set(resume_skills).intersection(set(job_skills))) / max(len(job_skills), 1)
 
-    # Experience score
+    # Experience Match (Semantic)
     resume_exp = resume.experience or resume_metadata.get("experience", [])
     job_exp = job_metadata.get("experience", [])
-    experience_match = experience_overlap_score(resume_exp, job_exp)
+    experience_match = semantic_similarity_score(resume_exp, job_exp, embedding_service)
 
-    # Education score
+    # Education Match (Semantic)
     resume_edu = resume.education or resume_metadata.get("education", [])
     job_edu = job_metadata.get("education", [])
-    education_match = education_overlap_score(resume_edu, job_edu)
+    education_match = semantic_similarity_score(resume_edu, job_edu, embedding_service)
 
-    # Job title score
+    # Job Title Match
     resume_titles = [e.get("job_title", "").lower() for e in resume_exp if isinstance(e, dict)]
     job_title = (job_metadata.get("role") or "").lower()
     title_match = 1.0 if any(job_title in title for title in resume_titles) else 0.0
 
+    # Location Match (Semantic)
+    resume_location = resume_metadata.get("personal_info", {}).get("location", "").lower()
+    job_location = job_metadata.get("location", "").lower()
+    location_match = semantic_location_match(resume_location, job_location, embedding_service)
+
+    # Weighted Score Calculation
     score += weights["skills"] * skills_match
     score += weights["experience"] * experience_match
     score += weights["education"] * education_match
     score += weights["title"] * title_match
+    score += weights["location"] * location_match
 
     return round(score * 100, 2)
-
-
 
 def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Optional[int] = None) -> List[Resume]:
     """
@@ -248,7 +255,7 @@ def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Op
                     resume_skills = metadata["skills"]
         
         job_metadata = job.job_metadata or {}
-        match_score = calculate_composite_match_score(resume, job_metadata)
+        match_score = calculate_composite_match_score(resume, job_metadata, embedding_service)
 
 
         # Add match score to resume metadata for reference
@@ -291,3 +298,72 @@ def education_overlap_score(resume_edu: List[dict], job_edu: List[dict]) -> floa
             matched += 1
 
     return matched / max(len(job_edu), 1)
+
+def semantic_similarity_score(resume_field: List[str], job_field: List[str], embedding_service) -> float:
+    """
+    Calculate semantic similarity between resume and job fields using embeddings.
+
+    Args:
+        resume_field (List[str]): List of strings from the resume (e.g., education, experience).
+        job_field (List[str]): List of strings from the job description.
+        embedding_service (EmbeddingService): Service to generate embeddings.
+
+    Returns:
+        float: Semantic similarity score between 0 and 1.
+    """
+    if not resume_field or not job_field:
+        return 0.0
+
+    try:
+        # Combine all text in the field into a single string
+        resume_text = " ".join(resume_field)
+        job_text = " ".join(job_field)
+
+        # Generate embeddings
+        resume_embedding = embedding_service.generate_embedding(resume_text)
+        job_embedding = embedding_service.generate_embedding(job_text)
+
+        # Check if embeddings are valid
+        if not resume_embedding or not job_embedding:
+            return 0.0
+
+        # Calculate cosine similarity
+        similarity = cosine_similarity(
+            [resume_embedding], [job_embedding]
+        )[0][0]
+
+        # Normalize similarity to [0, 1]
+        return max(0.0, min(1.0, similarity))
+
+    except Exception as e:
+        logger.error(f"Error calculating semantic similarity: {str(e)}")
+        return 0.0
+
+def semantic_location_match(resume_location: str, job_location: str, embedding_service: EmbeddingService) -> float:
+    """
+    Calculate semantic similarity between resume and job locations using embeddings.
+    """
+    if not resume_location or not job_location:
+        return 0.0
+
+    try:
+        # Generate embeddings for locations
+        resume_embedding = embedding_service.generate_embedding(resume_location)
+        job_embedding = embedding_service.generate_embedding(job_location)
+
+        # Check if embeddings are valid
+        if not resume_embedding or not job_embedding:
+            return 0.0
+
+        # Calculate cosine similarity
+        similarity = cosine_similarity([resume_embedding], [job_embedding])[0][0]
+
+        # Log the similarity score
+        logger.info(f"Resume Location: {resume_location}, Job Location: {job_location}, Similarity: {similarity}")
+
+        # Normalize similarity to [0, 1]
+        return max(0.0, min(1.0, similarity))
+
+    except Exception as e:
+        logger.error(f"Error calculating semantic similarity for locations: {str(e)}")
+        return 0.0

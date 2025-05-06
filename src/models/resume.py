@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String,ARRAY, ForeignKey, DateTime, JSON, Float
+from sqlalchemy import Column, Integer, String, ARRAY, ForeignKey, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from src.database import Base
+from src.models import User
 
 class Resume(Base):
     __tablename__ = "resumes"
@@ -24,5 +25,6 @@ class Resume(Base):
     embedding = Column(ARRAY(Float), nullable=True)
     embedding_updated_at = Column(DateTime, nullable=True)
 
-    folder = relationship("Folder", back_populates="resumes")
-    user = relationship("User")
+    # Relationships
+    folder = relationship("Folder", back_populates="resumes")  # Use string reference
+    user = relationship("User")  # Use string reference

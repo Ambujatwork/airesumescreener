@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from src.database import Base
+from src.models import User
 
 class Folder(Base):
     __tablename__ = "folders"
@@ -13,5 +14,5 @@ class Folder(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", back_populates="folders")
+    user = relationship("User", back_populates="folders")  # Use string reference
     resumes = relationship("Resume", back_populates="folder")
