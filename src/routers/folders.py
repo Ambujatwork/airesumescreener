@@ -76,9 +76,31 @@ async def upload_resumes_to_folder(
 
     parser = TextParser()
     uploaded_resumes = []
+    # Track processed file hashes to avoid duplicates in a single upload batch
+    processed_hashes = set()
 
     for file in files:
         try:
+            # Reset file pointer to start to ensure we can read the content
+            await file.seek(0)
+            
+            # First read the file content for hash checking
+            file_content = await file.read()
+            
+            # Compute hash to check for duplicates within the same upload batch
+            import hashlib
+            content_hash = hashlib.sha256(file_content).hexdigest()
+            
+            # Skip if this exact file was already processed in this batch
+            if content_hash in processed_hashes:
+                logger.warning(f"Skipping duplicate file in upload batch: {file.filename}")
+                continue
+                
+            # Add to processed hashes
+            processed_hashes.add(content_hash)
+            
+            # Reset file pointer to extract text
+            await file.seek(0)
             extracted_text = await TextExtractor.extract_text(file)
 
             if not extracted_text:
@@ -94,8 +116,6 @@ async def upload_resumes_to_folder(
             if not skills:
                 skills = parsed_metadata.get("technical_skills", []) + parsed_metadata.get("tools", [])
 
-            file_content = await file.read()
-
             resume = await create_resume(
                 db, folder_id, current_user.id, file.filename,
                 file_content,
@@ -103,17 +123,22 @@ async def upload_resumes_to_folder(
                     "parsed_metadata": parsed_metadata,
                     "candidate_name": candidate_name,
                     "candidate_email": candidate_email,
-                    "skills": skills
-                    
+                    "skills": skills  
                 }
             )
             uploaded_resumes.append(resume)
 
         except Exception as e:
             logger.error(f"Failed to upload {file.filename}: {str(e)}")
+            traceback.print_exc()  # Print full stack trace for debugging
             continue
 
-    return uploaded_resumes
+    # Ensure uniqueness in the response
+    unique_resumes = {}
+    for resume in uploaded_resumes:
+        unique_resumes[resume.id] = resume
+    
+    return list(unique_resumes.values())
 
 
 @router.get("/{folder_id}/resumes", response_model=List[Resume])
@@ -126,4 +151,11 @@ async def get_resumes_in_folder(
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    return get_resumes_by_folder(db, folder_id, current_user.id)
+    resumes = get_resumes_by_folder(db, folder_id, current_user.id)
+    
+    # Ensure uniqueness in the response
+    unique_resumes = {}
+    for resume in resumes:
+        unique_resumes[resume.id] = resume
+    
+    return list(unique_resumes.values())

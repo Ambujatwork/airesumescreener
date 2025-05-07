@@ -1,104 +1,105 @@
+from typing import List, Optional, Dict, Any, Union
 import os
+import numpy as np
 import logging
-from typing import List, Dict, Any, Optional
-from openai import AzureOpenAI
+import asyncio
+from datetime import datetime
+import openai
+from openai import AsyncAzureOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
 class EmbeddingService:
-    """
-    Service for generating embeddings using Azure OpenAI.
-    Updated to use the newer OpenAI client library.
-    """
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(EmbeddingService, cls).__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
+    """Service for generating embeddings using Azure OpenAI."""
+    
     def __init__(self):
-        if self._initialized:
-            return
-
-        try:
-            # Get API credentials from environment variables
-            self.api_key = os.getenv("AZURE_OPENAI_API_KEY")
-            self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-            self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2023-05-15")
-            self.model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
-            self.max_token_length = 8191  # Max tokens for embedding model
-
-            # Initialize the client
-            self.client = AzureOpenAI(
-                api_version=self.api_version,
-                azure_endpoint=self.endpoint,
-                api_key=self.api_key
-            )
-            
-            self._initialized = True
-            logger.info("EmbeddingService initialized successfully.")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize EmbeddingService: {str(e)}")
-            raise
-
-    def generate_embedding(self, text: str) -> List[float]:
+        self.client = AsyncAzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+        )
+        # Default model for embeddings
+        self.embedding_model = "text-embedding-ada-002"  # Azure's embedding model name
+        self.embedding_dimension = 1536  # Default dimension for ada-002 model
+        
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=30))
+    async def generate_embedding(self, text: str) -> List[float]:
         """
-        Generate embedding vector for the given text using Azure OpenAI.
-        Returns an empty list if there's an error.
+        Generate embedding for a single text using Azure OpenAI API.
+        
+        Args:
+            text: Text to generate embedding for
+            
+        Returns:
+            List of floats representing the embedding vector
         """
-        if not text:
+        if not text or not text.strip():
             logger.warning("Empty text provided for embedding generation")
-            return []
+            # Return zero vector with correct dimensionality
+            return [0.0] * self.embedding_dimension
             
         try:
-            # Truncate text if needed to fit model's context window
-            truncated_text = text[:self.max_token_length]
+            # Truncate text if necessary (model has token limits)
+            truncated_text = text[:8000]  # Reasonable limit for most embedding models
             
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=truncated_text
+            response = await self.client.embeddings.create(
+                input=[truncated_text],
+                model=self.embedding_model
             )
             
-            # Extract the embedding from the response
             embedding = response.data[0].embedding
             return embedding
             
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
-            return []
-            
-    def get_text_similarity(self, text1: str, text2: str) -> float:
+            raise
+    
+    async def generate_embeddings_batch(self, texts: List[str], batch_size: int = 20) -> List[List[float]]:
         """
-        Calculate cosine similarity between two text strings.
-        Returns a value between 0 and 1, where 1 is the highest similarity.
-        """
-        import numpy as np
+        Generate embeddings for multiple texts in batches.
         
-        if not text1 or not text2:
+        Args:
+            texts: List of texts to generate embeddings for
+            batch_size: Number of texts to process in each batch
+            
+        Returns:
+            List of embedding vectors
+        """
+        results = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            # Process batch concurrently
+            batch_results = await asyncio.gather(
+                *[self.generate_embedding(text) for text in batch]
+            )
+            results.extend(batch_results)
+            
+        return results
+            
+    def compute_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
+        """
+        Compute cosine similarity between two embeddings.
+        
+        Args:
+            embedding1: First embedding vector
+            embedding2: Second embedding vector
+            
+        Returns:
+            Cosine similarity score (0-1)
+        """
+        if not embedding1 or not embedding2:
             return 0.0
             
-        try:
-            # Generate embeddings
-            embedding1 = self.generate_embedding(text1)
-            embedding2 = self.generate_embedding(text2)
-            
-            if not embedding1 or not embedding2:
-                return 0.0
-                
-            # Calculate cosine similarity
-            a = np.array(embedding1)
-            b = np.array(embedding2)
-            
-            dot_product = np.dot(a, b)
-            norm_a = np.linalg.norm(a)
-            norm_b = np.linalg.norm(b)
-            
-            similarity = dot_product / (norm_a * norm_b)
-            return float(similarity)
-            
-        except Exception as e:
-            logger.error(f"Error calculating text similarity: {str(e)}")
+        # Convert to numpy arrays for efficient computation
+        vec1 = np.array(embedding1)
+        vec2 = np.array(embedding2)
+        
+        # Compute cosine similarity
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+        
+        if norm1 == 0 or norm2 == 0:
             return 0.0
+            
+        return np.dot(vec1, vec2) / (norm1 * norm2)

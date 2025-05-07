@@ -1,17 +1,18 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, Header
-from .routers import auth, folders, jobs
+from .routers import auth, folders, jobs, embeddings
 from .database import engine, Base
 from dotenv import load_dotenv
 import os
 from src.models.user import User
 from src.dependencies.security import get_current_user
 from src.routers import search
+
+
 load_dotenv()
 
 print(f"AZURE_OPENAI_API_KEY: {os.getenv('AZURE_OPENAI_API_KEY')}")
 print(f"AZURE_OPENAI_ENDPOINT: {os.getenv('AZURE_OPENAI_ENDPOINT')}")
 print(f"AZURE_OPENAI_API_VERSION: {os.getenv('AZURE_OPENAI_API_VERSION')}")
-# Print environment variables for debugging (remove in production)
 print(f"DATABASE_URL set: {'Yes' if os.getenv('DATABASE_URL') else 'No'}")
 print(f"SECRET_KEY set: {'Yes' if os.getenv('SECRET_KEY') else 'No'}")
 print(f"MONGO_URL set: {'Yes' if os.getenv('MONGO_URL') else 'No'}")
@@ -24,6 +25,7 @@ app.include_router(auth.router)
 app.include_router(folders.router)
 app.include_router(jobs.router)
 app.include_router(search.router)
+app.include_router(embeddings.router)
 
 @app.get("/")
 def read_root():

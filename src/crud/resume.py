@@ -3,45 +3,93 @@ from bson import ObjectId
 from src.models.resume import Resume
 from src.database_mongo import resumes_collection
 import json
+import hashlib
+import logging
+import hashlib
+from src.models.resume import Resume
+from src.database_mongo import resumes_collection
+
+
+logger = logging.getLogger(__name__)
 
 async def create_resume(
-    db: Session, 
-    folder_id: int, 
-    user_id: int, 
-    filename: str, 
+    db: Session,
+    folder_id: int,
+    user_id: int,
+    filename: str,
     content: bytes,
     metadata: dict = None
 ):
-    # Handle nested structure in parsed_metadata
+    import hashlib
+    from src.models.resume import Resume
+    from src.database_mongo import resumes_collection
+
+    # Compute hash
+    content_hash = hashlib.sha256(content).hexdigest()
+    logger.info(f"Filename: {filename}, Content Hash: {content_hash}")
+
+    # Check if resume already exists WITHIN THE SAME FOLDER
+    existing_resume = db.query(Resume).filter(
+        Resume.user_id == user_id,
+        Resume.folder_id == folder_id,  # Check for folder_id match
+        Resume.content_hash == content_hash
+    ).first()
+
+    if existing_resume:
+        logger.info(f"Duplicate resume detected for hash: {content_hash} in folder_id: {folder_id}")
+        return existing_resume  # Skip insert if already exists in this folder
+
+    # Extract metadata
     personal_info = metadata.get("parsed_metadata", {}).get("personal_info", {}) if metadata else {}
     candidate_name = personal_info.get("name")
     candidate_email = personal_info.get("email")
 
-    # Store raw content in MongoDB
+    # Check if this content already exists in another folder (to reuse embeddings later)
+    existing_resume_any_folder = db.query(Resume).filter(
+        Resume.user_id == user_id,
+        Resume.content_hash == content_hash
+    ).first()
+
+    # Store content in MongoDB (initially without resume_id)
     mongo_result = await resumes_collection.insert_one({
         "content": content.decode("utf-8", errors="ignore"),
         "filename": filename,
         "folder_id": folder_id,
         "user_id": user_id
     })
-    
-    # Store metadata in PostgreSQL
+    mongo_id = str(mongo_result.inserted_id)
+
+    # Create PostgreSQL entry
     db_resume = Resume(
         filename=filename,
         folder_id=folder_id,
         user_id=user_id,
-        mongo_id=str(mongo_result.inserted_id),
-        candidate_name=candidate_name,  # Extracted from nested metadata
-        candidate_email=candidate_email,  # Extracted from nested metadata
-        skills=metadata.get("skills") if metadata else None, 
+        mongo_id=mongo_id,
+        content_hash=content_hash,
+        candidate_name=candidate_name,
+        candidate_email=candidate_email,
+        skills=metadata.get("skills") if metadata else None,
         education=metadata.get("education") if metadata else None,
         experience=metadata.get("experience") if metadata else None,
         parsed_metadata=metadata
     )
-    
+
+    # If this resume exists in another folder and has embeddings, copy them
+    if existing_resume_any_folder and existing_resume_any_folder.embedding is not None:
+        db_resume.embedding = existing_resume_any_folder.embedding
+        db_resume.embedding_updated_at = existing_resume_any_folder.embedding_updated_at
+        logger.info(f"Copied existing embedding from resume ID {existing_resume_any_folder.id}")
+
     db.add(db_resume)
     db.commit()
     db.refresh(db_resume)
+
+    # Update MongoDB with the resume ID from PostgreSQL
+    await resumes_collection.update_one(
+        {"_id": ObjectId(mongo_id)},
+        {"$set": {"resume_id": db_resume.id}}
+    )
+
     return db_resume
 
 async def get_resume_content(resume_id: str):

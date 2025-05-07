@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, ARRAY, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from src.database import Base
@@ -16,5 +16,6 @@ class Job(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     created_at = Column(DateTime, default = datetime.utcnow)
 
-
+    embedding = Column(ARRAY(Float), nullable=True)
+    embedding_updated_at = Column(DateTime, nullable=True)
     user = relationship("User", back_populates = "jobs")

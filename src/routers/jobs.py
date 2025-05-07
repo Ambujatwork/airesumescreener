@@ -7,7 +7,7 @@ from ..schemas.job import JobCreate, Job
 from ..schemas.resume import Resume
 from ..crud.job import create_job, get_job_by_id, get_jobs_by_user, delete_job
 from ..crud.resume import get_resumes_by_folder
-from ..services.ranking_service import rank_resumes_by_job_metadata, rank_resumes_by_job_id
+from ..services.ranking_service import RankingService  
 from ..models.user import User
 
 
@@ -54,27 +54,52 @@ def delete_job_endpoint(
     raise HTTPException(status_code=404, detail="Job not found")
 
 @router.get("/candidates/rank", response_model=List[Resume])
-def rank_candidates(
+async def rank_candidates(
     job_id: int = Query(..., description="ID of the job to rank candidates against"),
     folder_id: Optional[int] = Query(None, description="Optional folder ID to filter resumes"),
     top_n: Optional[int] = Query(None, description="Number of top candidates to return"),
+    use_embeddings: bool = Query(True, description="Whether to use embeddings for ranking"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Rank candidates (resumes) against a job description.
+    Can use either embedding-based semantic matching or metadata-based matching.
+    """
+    # Get the job
     job = get_job_by_id(db, job_id, current_user.id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Get resumes to rank
     resumes = get_resumes_by_folder(db, folder_id=folder_id, user_id=current_user.id)
     if not resumes:
         raise HTTPException(status_code=404, detail="No resumes found")
 
-
+    # Remove duplicates
     unique_resumes_dict = {resume.id: resume for resume in resumes}
     unique_resumes = list(unique_resumes_dict.values())
 
-    ranked_resumes = rank_resumes_by_job_metadata(unique_resumes, job.description)
+    # Initialize ranking service
+    ranking_service = RankingService()
 
+    # Choose ranking method based on parameter and availability of embeddings
+    if use_embeddings:
+        try:
+            # Perform embedding-based ranking
+            ranked_resumes = await ranking_service.rank_resumes_by_job_id(
+                db, job_id, unique_resumes, update_embeddings=True
+            )
+        except Exception as e:
+            # Fall back to metadata-based ranking if embedding ranking fails
+            import logging
+            logging.error(f"Error in embedding-based ranking: {str(e)}")
+            ranked_resumes = ranking_service.rank_resumes_by_job_metadata(unique_resumes, job.description)
+    else:
+        # Use metadata-based ranking
+        ranked_resumes = ranking_service.rank_resumes_by_job_metadata(unique_resumes, job.description)
+
+    # Apply top_n filter if specified
     if top_n and top_n > 0:
         ranked_resumes = ranked_resumes[:top_n]
 

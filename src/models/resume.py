@@ -24,7 +24,7 @@ class Resume(Base):
 
     embedding = Column(ARRAY(Float), nullable=True)
     embedding_updated_at = Column(DateTime, nullable=True)
-
+    content_hash = Column(String, nullable=False, index=True)
     # Relationships
     folder = relationship("Folder", back_populates="resumes")  # Use string reference
     user = relationship("User")  # Use string reference
