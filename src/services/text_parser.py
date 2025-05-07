@@ -74,16 +74,26 @@ class TextParser:
 
     def _fallback_parse(self, text: str) -> Dict[str, Any]:
         """Simple regex fallback if OpenAI fails."""
-        name = "Unknown"
+        # Extract name (basic heuristic: first line or capitalized words)
+        name_match = re.search(r"(?<=Name:)[^\n]+", text) or re.search(r"([A-Z][a-z]+(?: [A-Z][a-z]+)+)", text)
+        name = name_match.group().strip() if name_match else "Unknown"
+
+        # Extract email
         email_match = re.search(r"[\w.-]+@[\w.-]+", text)
-        phone_match = re.search(r"(\+?\d{1,3}[\s-]?)?(\(?\d{3}\)?[\s-]?)?\d{3}[\s-]?\d{4}", text)
+
+        # Extract phone
+        phone_match = re.search(r"(\+?\d{1,3}[\\s-]?)?(\(?\d{3}\)?[\s-]?)?\d{3}[\s-]?\d{4}", text)
+
+        # Extract location (basic heuristic: look for common location patterns)
+        location_match = re.search(r"(?<=Location:)[^\n]+", text)
+        location = location_match.group().strip() if location_match else ""
 
         return {
             "personal_info": {
                 "name": name,
                 "email": email_match.group() if email_match else "",
                 "phone": phone_match.group() if phone_match else "",
-                "location": ""
+                "location": location
             },
             "experience": [],
             "education": [],
@@ -135,13 +145,21 @@ class TextParser:
         try:
             response = self._call_openai_api(text, parse_type)
             if not response:
+                logger.warning("OpenAI API returned no response. Falling back to regex parsing.")
                 return self._fallback_parse(text)
 
+            logger.info(f"Raw OpenAI API response: {response}")
             parsed = self._extract_json_from_response(response)
             if not parsed:
+                logger.warning("Failed to parse JSON response. Falling back to regex parsing.")
                 return self._fallback_parse(text)
-            return parsed
 
+            # Validate parsed output
+            if "personal_info" not in parsed:
+                logger.warning("Parsed output missing 'personal_info'. Falling back to regex parsing.")
+                return self._fallback_parse(text)
+
+            return parsed
         except Exception as e:
             logger.error(f"Parse error: {str(e)}")
             return self._fallback_parse(text)

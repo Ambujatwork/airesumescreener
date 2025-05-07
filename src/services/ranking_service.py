@@ -186,45 +186,18 @@ def calculate_composite_match_score(resume: Resume, job_metadata: dict, embeddin
 
     return round(score * 100, 2)
 
-def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Optional[int] = None) -> List[Resume]:
+def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Rank resumes based on the job ID by comparing resume metadata with job requirements.
 
-    Args:
-        db (Session): Database session.
-        job_id (int): The ID of the job to rank resumes against.
-        user_id (int): The ID of the user requesting the ranking.
-        folder_id (Optional[int]): Filter resumes by folder ID if provided.
-
     Returns:
-        List[Resume]: A list of resumes ranked by their match score.
+        List[Dict[str, Any]]: A list of resumes with their match scores.
     """
     # Fetch the job by ID
     job = db.query(JobModel).filter(JobModel.id == job_id, JobModel.user_id == user_id).first()
     if not job:
         logger.error(f"Job with ID {job_id} not found for user {user_id}.")
         return []
-
-    # Extract skills from job metadata or parse job description
-    job_skills = []
-    if job.job_metadata and isinstance(job.job_metadata, dict) and "skills" in job.job_metadata:
-        if isinstance(job.job_metadata["skills"], dict) and "required" in job.job_metadata["skills"]:
-            job_skills = job.job_metadata["skills"]["required"]
-        elif isinstance(job.job_metadata["skills"], list):
-            job_skills = job.job_metadata["skills"]
-            
-    # If no skills found in metadata, parse job description
-    if not job_skills:
-        parser = TextParser()
-        job_metadata = parser.parse_text(job.description, parse_type="job")
-        if job_metadata and isinstance(job_metadata, dict) and "skills" in job_metadata:
-            if isinstance(job_metadata["skills"], dict) and "required" in job_metadata["skills"]:
-                job_skills = job_metadata["skills"]["required"]
-            elif isinstance(job_metadata["skills"], list):
-                job_skills = job_metadata["skills"]
-
-    if not job_skills:
-        logger.warning(f"No skills found for job ID {job_id}. Ranking will be inaccurate.")
 
     # Fetch resumes based on folder ID
     query = db.query(ResumeModel).filter(ResumeModel.user_id == user_id)
@@ -239,32 +212,21 @@ def rank_resumes_by_job_id(db: Session, job_id: int, user_id: int, folder_id: Op
     # Rank resumes based on match score
     scored_resumes = []
     for resume in resumes:
-        # Get resume skills
-        resume_skills = resume.skills or []
-        if not resume_skills and resume.metadata:
-            # Try to extract from metadata if skills field is empty
-            metadata = resume.metadata
-            if isinstance(metadata, str):
-                try:
-                    metadata = json.loads(metadata)
-                except:
-                    metadata = {}
-                    
-            if isinstance(metadata, dict) and "skills" in metadata:
-                if isinstance(metadata["skills"], list):
-                    resume_skills = metadata["skills"]
-        
         job_metadata = job.job_metadata or {}
-        match_score = calculate_composite_match_score(resume, job_metadata, embedding_service)
+        match_score = calculate_composite_match_score(resume, job_metadata, EmbeddingService())
 
-
-        # Add match score to resume metadata for reference
-        setattr(resume, "match_score", match_score)
-        scored_resumes.append((resume, match_score))
+        # Add match score to the response
+        scored_resumes.append({
+            "id": resume.id,
+            "candidate_name": resume.candidate_name,
+            "candidate_email": resume.candidate_email,
+            "skills": resume.skills,
+            "filename": resume.filename,
+            "match_score": match_score
+        })
 
     # Sort resumes by match score in descending order
-    sorted_resumes = [r[0] for r in sorted(scored_resumes, key=lambda x: x[1], reverse=True)]
-    return sorted_resumes
+    return sorted(scored_resumes, key=lambda x: x["match_score"], reverse=True)
 
 def experience_overlap_score(resume_exp: List[dict], job_exp: List[dict]) -> float:
     """Check overlap in job titles and duration keywords."""
