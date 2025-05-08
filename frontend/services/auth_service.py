@@ -1,6 +1,7 @@
 import streamlit as st
 from typing import Dict, Any, Optional, Tuple
 import logging
+import requests
 from .api_service import APIService
 
 logger = logging.getLogger(__name__)
@@ -8,51 +9,38 @@ logger = logging.getLogger(__name__)
 class AuthService(APIService):
     """Service for authentication operations"""
     
-    def login(self, username: str, password: str) -> Tuple[bool, Optional[str]]:
-        """
-        Login user and store token
-        
-        Args:
-            username: User's username
-            password: User's password
-            
-        Returns:
-            (success, error_message)
-        """
+    def login(self, username: str, password: str) -> bool:
+        """Login user and store token"""
         try:
-            # Auth requires form data, not JSON
-            response = self.post(
-                "login",
-                {"username": username, "password": password},
-                as_json=False
+            response = requests.post(
+                f"{self.base_url}/login",
+                data={"username": username, "password": password}
             )
             
-            if "error" in response:
-                return False, response["error"]
-                
-            if "access_token" in response:
-                st.session_state.access_token = response["access_token"]
+            # Handle response
+            if response.status_code == 401:  # Unauthorized
+                st.error("Incorrect username or password. Please try again.")
+                return False
+            elif response.status_code >= 400:  # Other client or server errors
+                error_message = response.json().get("detail", "An error occurred.")
+                st.error(f"Login failed: {error_message}")
+                return False
+            
+            # Successful login
+            data = self._handle_response(response)
+            if "access_token" in data:
+                st.session_state.access_token = data["access_token"]
                 st.session_state.logged_in = True
-                return True, None
-                
-            return False, "Invalid response from server"
+                return True
+            
+            st.error("Unexpected response from the server.")
+            return False
         except Exception as e:
-            logger.exception(f"Login failed: {str(e)}")
-            return False, f"Login failed: {str(e)}"
+            st.error(f"Login failed: {str(e)}")
+            return False
     
     def signup(self, email: str, username: str, password: str, full_name: str) -> Tuple[bool, Optional[str]]:
-        """
-        Register a new user
         
-        Args:
-            email: User's email
-            username: User's username
-            password: User's password
-            full_name: User's full name
-            
-        Returns:
-            (success, error_message)
-        """
         try:
             response = self.post(
                 "signup",
@@ -80,16 +68,7 @@ class AuthService(APIService):
             del st.session_state.logged_in
             
     def update_profile_image(self, user_id: int, image_url: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
-        """
-        Update user's profile image
         
-        Args:
-            user_id: User ID
-            image_url: URL of the profile image
-            
-        Returns:
-            (success, user_data or error_message)
-        """
         try:
             response = self.put(
                 f"users/{user_id}/profile-image",

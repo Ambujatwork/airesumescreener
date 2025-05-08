@@ -1,14 +1,11 @@
 from sqlalchemy.orm import Session
 from bson import ObjectId
-from src.models.resume import Resume
-from src.database_mongo import resumes_collection
-import json
-import hashlib
+from fastapi import BackgroundTasks
 import logging
 import hashlib
 from src.models.resume import Resume
 from src.database_mongo import resumes_collection
-
+from src.services.embedding_background_manager import EmbeddingBackgroundManager
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +15,9 @@ async def create_resume(
     user_id: int,
     filename: str,
     content: bytes,
-    metadata: dict = None
+    metadata: dict = None,
+    background_tasks: BackgroundTasks = None
 ):
-    import hashlib
-    from src.models.resume import Resume
-    from src.database_mongo import resumes_collection
-
     # Compute hash
     content_hash = hashlib.sha256(content).hexdigest()
     logger.info(f"Filename: {filename}, Content Hash: {content_hash}")
@@ -84,11 +78,21 @@ async def create_resume(
     db.commit()
     db.refresh(db_resume)
 
-    # Update MongoDB with the resume ID from PostgreSQL
     await resumes_collection.update_one(
         {"_id": ObjectId(mongo_id)},
         {"$set": {"resume_id": db_resume.id}}
     )
+
+    # Schedule background embedding generation if:
+    # 1. We have background_tasks available
+    # 2. We didn't copy embeddings from an existing resume
+    if background_tasks and (not existing_resume_any_folder or existing_resume_any_folder.embedding is None):
+        EmbeddingBackgroundManager.schedule_resume_embedding_task(
+            background_tasks,
+            db,
+            db_resume.id
+        )
+        logger.info(f"Scheduled background embedding generation for resume ID: {db_resume.id}")
 
     return db_resume
 

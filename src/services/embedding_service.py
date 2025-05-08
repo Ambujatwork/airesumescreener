@@ -77,7 +77,7 @@ class EmbeddingService:
             
         return results
             
-    def compute_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
+    def compute_similarity(self, embedding1: Union[List[float], np.ndarray], embedding2: Union[List[float], np.ndarray]) -> float:
         """
         Compute cosine similarity between two embeddings.
         
@@ -88,18 +88,57 @@ class EmbeddingService:
         Returns:
             Cosine similarity score (0-1)
         """
-        if not embedding1 or not embedding2:
-            return 0.0
+        try:
+            # Check for empty or None embeddings
+            if embedding1 is None or embedding2 is None:
+                return 0.0
+                
+            if isinstance(embedding1, list) and len(embedding1) == 0:
+                return 0.0
+                
+            if isinstance(embedding2, list) and len(embedding2) == 0:
+                return 0.0
+                
+            # Convert to numpy arrays if they aren't already
+            if not isinstance(embedding1, np.ndarray):
+                vec1 = np.array(embedding1, dtype=np.float32)
+            else:
+                vec1 = embedding1
+                
+            if not isinstance(embedding2, np.ndarray):
+                vec2 = np.array(embedding2, dtype=np.float32)
+            else:
+                vec2 = embedding2
             
-        # Convert to numpy arrays for efficient computation
-        vec1 = np.array(embedding1)
-        vec2 = np.array(embedding2)
-        
-        # Compute cosine similarity
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
+            # Compute cosine similarity
+            norm1 = np.linalg.norm(vec1)
+            norm2 = np.linalg.norm(vec2)
             
-        return np.dot(vec1, vec2) / (norm1 * norm2)
+            # Check for zero norms to avoid division by zero
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+                
+            # Calculate dot product and normalize
+            dot_product = np.dot(vec1, vec2)
+            
+            # Handle the case when dot_product is an array
+            if isinstance(dot_product, np.ndarray):
+                # This means we're dealing with multi-dimensional embeddings
+                dot_product = float(np.sum(dot_product))
+                
+            # Calculate similarity
+            similarity = dot_product / (norm1 * norm2)
+            
+            # Ensure the result is a scalar
+            if isinstance(similarity, np.ndarray):
+                if similarity.size == 1:
+                    similarity = float(similarity.item())
+                else:
+                    # If we have an array with multiple values, take the mean
+                    similarity = float(np.mean(similarity))
+            
+            return float(similarity)
+            
+        except Exception as e:
+            logger.error(f"Error computing similarity: {str(e)}")
+            return 0.0

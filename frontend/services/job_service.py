@@ -28,7 +28,7 @@ class JobService(APIService):
             logger.exception(f"Failed to get jobs: {str(e)}")
             return []
     
-    def create_job(self, title: str, description: str, required_skills: List[str]) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    def create_job(self, title: str, description: str, required_skills: List[str], role: str = "") -> Tuple[bool, Optional[Dict[str, Any]]]:
         """
         Create a new job
         
@@ -36,6 +36,7 @@ class JobService(APIService):
             title: Job title
             description: Job description
             required_skills: List of required skills
+            role: Job role (defaults to empty string to satisfy NOT NULL constraint)
             
         Returns:
             (success, job_data or error_message)
@@ -46,7 +47,8 @@ class JobService(APIService):
                 {
                     "title": title, 
                     "description": description,
-                    "required_skills": required_skills
+                    "required_skills": required_skills,
+                    "role": role  # Always provide a value for role
                 }
             )
             
@@ -154,5 +156,3 @@ class SearchService(APIService):
         except Exception as e:
             logger.exception(f"Failed to search resumes: {str(e)}")
             return {"results": [], "total": 0}
-
-

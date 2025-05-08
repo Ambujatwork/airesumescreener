@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
@@ -20,10 +20,11 @@ router = APIRouter(
 @router.post("/", response_model=Job)
 def create_new_job(
     job: JobCreate,
+    background_tasks: BackgroundTasks = None,  # Added background_tasks parameter
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return create_job(db, job, current_user.id)
+    return create_job(db, job, current_user.id, background_tasks)  
 
 @router.get("/", response_model=List[Job])
 def get_all_jobs(

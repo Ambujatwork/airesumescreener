@@ -5,7 +5,7 @@ from typing import Dict, Any
 class JobBase(BaseModel):
     title: str
     description: str
-    role: str
+    role: Optional[str] = None
 
 class JobCreate(JobBase):
     pass

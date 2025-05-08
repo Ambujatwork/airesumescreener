@@ -39,7 +39,7 @@ async def search_resumes(
     Search resumes using hybrid search (keywords + semantic).
     """
     search_service = HybridSearchService()
-    results = search_service.search_resumes(db, query, current_user.id, folder_id, limit)
+    results = await search_service.search_resumes(db, query, current_user.id, folder_id, limit)
 
     # Format the results
     search_results = [
@@ -58,4 +58,3 @@ async def search_resumes(
         results=search_results,
         total=len(search_results),
     )
-

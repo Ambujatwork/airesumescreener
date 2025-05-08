@@ -140,7 +140,7 @@ class HybridSearchService:
         
         return "\n".join(text_parts)
 
-    def _ensure_embedding(self, db: Session, resume: ResumeModel) -> List[float]:
+    async def _ensure_embedding(self, db: Session, resume: ResumeModel) -> List[float]:
         """Ensure resume has an up-to-date embedding."""
         needs_update = False
         
@@ -161,7 +161,7 @@ class HybridSearchService:
                 resume_text = self._extract_resume_text(resume)
                 
                 # Generate embedding
-                embedding = self.embedding_service.generate_embedding(resume_text)
+                embedding = await self.embedding_service.generate_embedding(resume_text)
                 
                 # Update resume object
                 resume.embedding = embedding
@@ -370,7 +370,7 @@ class HybridSearchService:
             logger.error(f"Error in keyword search: {str(e)}")
             return {}
 
-    def _semantic_search(self, db: Session, query: str, user_id: int, parsed_query: Dict[str, Any], folder_id: Optional[int] = None) -> Dict[int, float]:
+    async def _semantic_search(self, db: Session, query: str, user_id: int, parsed_query: Dict[str, Any], folder_id: Optional[int] = None) -> Dict[int, float]:
         """
         Perform improved semantic search with query enhancement.
         """
@@ -394,7 +394,7 @@ class HybridSearchService:
                 enhanced_query += f"\n\nRoles: {', '.join(parsed_query['roles'])}"
                 
             # Generate query embedding
-            query_embedding = self.embedding_service.generate_embedding(enhanced_query)
+            query_embedding = await self.embedding_service.generate_embedding(enhanced_query)
 
             # Get all relevant resumes
             query = db.query(ResumeModel).filter(ResumeModel.user_id == user_id)
@@ -406,7 +406,7 @@ class HybridSearchService:
             # Calculate similarity for each resume with embedding update
             for resume in resumes:
                 # Ensure up-to-date embedding
-                resume_embedding = self._ensure_embedding(db, resume)
+                resume_embedding = await self._ensure_embedding(db, resume)
                 if not resume_embedding:
                     continue
 
@@ -552,8 +552,8 @@ class HybridSearchService:
 
         return combined_scores
 
-    def search_resumes(self, db: Session, query: str, user_id: int, folder_id: Optional[int] = None,
-                   limit: int = 10, query_location: str = "") -> List[Tuple[ResumeModel, float]]:
+    async def search_resumes(self, db: Session, query: str, user_id: int, folder_id: Optional[int] = None,
+               limit: int = 10, query_location: str = "") -> List[Tuple[ResumeModel, float]]:
         """
         Main search method that combines keyword, semantic, and location-based searches.
         """
@@ -569,7 +569,7 @@ class HybridSearchService:
 
             # Perform the three types of searches
             keyword_scores = self._keyword_search(db, parsed_query, user_id, folder_id)
-            semantic_scores = self._semantic_search(db, query, user_id, parsed_query, folder_id)
+            semantic_scores = await self._semantic_search(db, query, user_id, parsed_query, folder_id)
             location_scores = self._location_match(db, query_location, user_id, folder_id)
 
             # Combine scores using weighted approach
@@ -611,7 +611,7 @@ class HybridSearchService:
         except Exception as e:
             logger.error(f"Error in hybrid search: {str(e)}")
             return []
-            
+                
     def search_by_job(self, db: Session, job_id: int, user_id: int, folder_id: Optional[int] = None,
                       limit: int = 10) -> List[Tuple[ResumeModel, float]]:
         """

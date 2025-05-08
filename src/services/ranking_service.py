@@ -3,6 +3,7 @@ import numpy as np
 import logging
 from sqlalchemy.orm import Session
 import asyncio
+import traceback
 
 from src.models.resume import Resume
 from src.models.job import Job
@@ -25,62 +26,110 @@ class RankingService:
         resumes: List[Resume],
         update_embeddings: bool = True
     ) -> List[Resume]:
-        """
-        Rank resumes against a job by ID.
-        
-        Args:
-            db: Database session
-            job_id: ID of the job to rank against
-            resumes: List of resumes to rank
-            update_embeddings: Whether to update missing embeddings
+        try:
+            # Get the job
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if not job:
+                logger.error(f"Job with ID {job_id} not found")
+                return resumes
+
+            # Generate job embedding
+            job_embeddings = await self.embedding_manager.update_job_embeddings(db, [job_id])
             
-        Returns:
-            List of resumes sorted by relevance
-        """
-        # Get the job
-        job = db.query(Job).filter(Job.id == job_id).first()
-        if not job:
-            logger.error(f"Job with ID {job_id} not found")
-            return resumes
+            # Debug log job embeddings
+            logger.debug(f"Job embeddings: {job_embeddings}")
             
-        # Generate job embedding
-        job_embeddings = await self.embedding_manager.update_job_embeddings(db, [job_id])
-        if job_id not in job_embeddings:
-            logger.error(f"Failed to generate embedding for job {job_id}")
-            return resumes
+            # Check if job_id exists in job_embeddings dictionary
+            if job_id not in job_embeddings:
+                logger.error(f"Failed to generate embedding for job {job_id}")
+                return resumes
             
-        job_embedding = job_embeddings[job_id]
-        
-        # Ensure resumes have embeddings
-        if update_embeddings:
-            resume_ids_without_embeddings = [
-                resume.id for resume in resumes
-                if resume.embedding is None or len(resume.embedding) == 0
-            ]
-            
-            if resume_ids_without_embeddings:
-                logger.info(f"Generating embeddings for {len(resume_ids_without_embeddings)} resumes")
-                await self.embedding_manager.update_resume_embeddings(db, resume_ids_without_embeddings)
+            # Get the job embedding, ensuring it's a valid object
+            job_embedding = job_embeddings.get(job_id)
+            if job_embedding is None:
+                logger.error(f"No embedding for job {job_id}")
+                return resumes
                 
-                # Refresh resume objects to get updated embeddings
-                resume_ids = [resume.id for resume in resumes]
-                resumes = db.query(Resume).filter(Resume.id.in_(resume_ids)).all()
-        
-        # Calculate similarity scores
-        scored_resumes = []
-        for resume in resumes:
-            if resume.embedding is None or len(resume.embedding) == 0:
-                logger.warning(f"Resume {resume.id} has no embedding, skipping")
-                continue
-                
-            similarity = self.embedding_service.compute_similarity(resume.embedding, job_embedding)
-            scored_resumes.append((resume, similarity))
+            # Log embedding type and shape for debugging
+            logger.debug(f"Job embedding type: {type(job_embedding)}")
+            if isinstance(job_embedding, np.ndarray):
+                logger.debug(f"Job embedding shape: {job_embedding.shape}")
+            elif isinstance(job_embedding, list):
+                logger.debug(f"Job embedding length: {len(job_embedding)}")
             
-        # Sort by similarity score (descending)
-        scored_resumes.sort(key=lambda x: x[1], reverse=True)
-        
-        # Return sorted resumes
-        return [resume for resume, _ in scored_resumes]
+            # Ensure it's a numpy array
+            if not isinstance(job_embedding, np.ndarray):
+                try:
+                    job_embedding = np.array(job_embedding, dtype=np.float32)
+                    logger.debug(f"Converted job embedding to numpy array, shape: {job_embedding.shape}")
+                except Exception as e:
+                    logger.error(f"Failed to convert job embedding to numpy array: {str(e)}")
+                    return resumes
+
+            # Ensure resumes have embeddings
+            if update_embeddings:
+                resume_ids_without_embeddings = []
+                for resume in resumes:
+                    # Explicit check for missing embeddings
+                    if resume.embedding is None:
+                        resume_ids_without_embeddings.append(resume.id)
+                    elif isinstance(resume.embedding, list) and len(resume.embedding) == 0:
+                        resume_ids_without_embeddings.append(resume.id)
+
+                if resume_ids_without_embeddings:
+                    logger.info(f"Generating embeddings for {len(resume_ids_without_embeddings)} resumes")
+                    await self.embedding_manager.update_resume_embeddings(db, resume_ids_without_embeddings)
+
+                    # Refresh resume objects to get updated embeddings
+                    resume_ids = [resume.id for resume in resumes]
+                    resumes = db.query(Resume).filter(Resume.id.in_(resume_ids)).all()
+
+            # Calculate similarity scores
+            scored_resumes = []
+            for resume in resumes:
+                try:
+                    # Skip resumes without embeddings
+                    if resume.embedding is None:
+                        logger.warning(f"Resume {resume.id} has no embedding, skipping")
+                        continue
+                        
+                    if isinstance(resume.embedding, list) and len(resume.embedding) == 0:
+                        logger.warning(f"Resume {resume.id} has empty embedding, skipping")
+                        continue
+
+                    # Debug log resume embedding
+                    logger.debug(f"Resume {resume.id} embedding type: {type(resume.embedding)}")
+                    
+                    # Convert resume embedding to numpy array
+                    resume_embedding = None
+                    try:
+                        resume_embedding = np.array(resume.embedding, dtype=np.float32)
+                        logger.debug(f"Resume {resume.id} embedding shape: {resume_embedding.shape}")
+                    except Exception as e:
+                        logger.error(f"Failed to convert resume {resume.id} embedding to numpy array: {str(e)}")
+                        continue
+                    
+                    # Calculate similarity
+                    similarity = self.embedding_service.compute_similarity(resume_embedding, job_embedding)
+                    logger.debug(f"Resume {resume.id} similarity: {similarity}")
+                    
+                    scored_resumes.append((resume, similarity))
+                    
+                except Exception as e:
+                    logger.error(f"Error processing resume {resume.id}: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    continue
+
+            # Sort by similarity score (descending)
+            scored_resumes.sort(key=lambda x: x[1], reverse=True)
+
+            # Return sorted resumes
+            return [resume for resume, _ in scored_resumes]
+            
+        except Exception as e:
+            logger.error(f"Error in embedding-based ranking: {str(e)}")
+            logger.error(traceback.format_exc())
+            return resumes  # Return original resumes on error
 
     def rank_resumes_by_job_metadata(
         self, 
@@ -90,17 +139,7 @@ class RankingService:
         education_weight: float = 0.1,
         experience_weight: float = 0.2
     ) -> List[Resume]:
-        """
-        Legacy method to rank resumes against a job description using metadata.
-        This will be replaced by embedding-based ranking in production.
         
-        Args:
-            resumes: List of resumes to rank
-            job_description: Job description text
-            
-        Returns:
-            List of resumes sorted by relevance
-        """
         # Implementation of metadata-based ranking logic
         # This is provided for backward compatibility until embedding-based ranking is fully deployed
         scored_resumes = []
@@ -114,7 +153,7 @@ class RankingService:
                 skills = resume.skills if isinstance(resume.skills, list) else []
                 # Count how many skills from the resume appear in the job description
                 skill_matches = sum(1 for skill in skills if skill.lower() in job_description.lower())
-                if skills:
+                if len(skills) > 0:  # Explicit check to avoid division by zero
                     skill_score = min(skill_matches / len(skills), 1.0)
                     score += skill_score * top_skills_weight
             

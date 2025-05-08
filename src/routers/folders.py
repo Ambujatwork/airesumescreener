@@ -67,6 +67,7 @@ async def delete_folder_by_id(
 async def upload_resumes_to_folder(
     folder_id: int,
     files: List[UploadFile] = File(...),
+    background_tasks: BackgroundTasks = None,  # Added background_tasks parameter
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -116,6 +117,7 @@ async def upload_resumes_to_folder(
             if not skills:
                 skills = parsed_metadata.get("technical_skills", []) + parsed_metadata.get("tools", [])
 
+            # Pass background_tasks to create_resume
             resume = await create_resume(
                 db, folder_id, current_user.id, file.filename,
                 file_content,
@@ -124,7 +126,8 @@ async def upload_resumes_to_folder(
                     "candidate_name": candidate_name,
                     "candidate_email": candidate_email,
                     "skills": skills  
-                }
+                },
+                background_tasks  # Add background_tasks parameter
             )
             uploaded_resumes.append(resume)
 
@@ -139,7 +142,6 @@ async def upload_resumes_to_folder(
         unique_resumes[resume.id] = resume
     
     return list(unique_resumes.values())
-
 
 @router.get("/{folder_id}/resumes", response_model=List[Resume])
 async def get_resumes_in_folder(

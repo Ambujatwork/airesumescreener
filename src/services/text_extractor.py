@@ -10,7 +10,6 @@ from docx import Document
 logger = logging.getLogger(__name__)
 
 class TextExtractor:
-    """Text extraction without OCR (works only for text-based PDFs/DOCX)"""
 
     @staticmethod
     async def extract_text(file: UploadFile) -> Optional[str]:
