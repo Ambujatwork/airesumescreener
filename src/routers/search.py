@@ -59,34 +59,3 @@ async def search_resumes(
         total=len(search_results),
     )
 
-# @router.get("/by-job/{job_id}", response_model=SearchResponse)
-# async def search_by_job(
-#     job_id: int,
-#     folder_id: Optional[int] = Query(None, description="Filter by folder ID"),
-#     limit: int = Query(10, description="Maximum number of results"),
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user),  # Use get_current_user like other endpoints
-# ):
-#     """
-#     Search resumes that match a specific job.
-#     """
-#     search_service = HybridSearchService()
-#     results = search_service.search_by_job(db, job_id, current_user.id, folder_id, limit)
-
-#     # Format the results
-#     search_results = [
-#         SearchResult(
-#             id=resume.id,
-#             filename=resume.filename,
-#             candidate_name=resume.candidate_name,
-#             candidate_email=resume.candidate_email,
-#             skills=resume.skills if isinstance(resume.skills, list) else [],
-#             search_score=getattr(resume, "search_score", 0.0),
-#         )
-#         for resume, _ in results
-#     ]
-
-#     return SearchResponse(
-#         results=search_results,
-#         total=len(search_results),
-#     )
