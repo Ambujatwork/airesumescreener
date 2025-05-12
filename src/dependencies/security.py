@@ -1,4 +1,3 @@
-# src/dependencies/security.py
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status

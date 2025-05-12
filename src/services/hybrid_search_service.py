@@ -32,10 +32,8 @@ class HybridSearchService:
             return
 
         try:
-            # Initialize embedding service for reuse
             self.embedding_service = EmbeddingService()
             
-            # Configuration for embedding updates
             self.embedding_freshness_days = 30  # Consider embeddings older than this to be stale
             
             # Configure weights for hybrid search components
@@ -63,8 +61,7 @@ class HybridSearchService:
     def _extract_resume_text(self, resume: ResumeModel) -> str:
         """Extract searchable text content from a resume with improved structure."""
         text_parts = []
-        
-        # Add candidate information with more weight
+  
         if resume.candidate_name:
             text_parts.append(f"Candidate Name: {resume.candidate_name}")
         if resume.candidate_email:

@@ -34,22 +34,18 @@ class RankingService:
                 return resumes
 
             # Generate job embedding
-            job_embeddings = await self.embedding_manager.update_job_embeddings(db, [job_id])
-            
-            # Debug log job embeddings
-            logger.debug(f"Job embeddings: {job_embeddings}")
-            
-            # Check if job_id exists in job_embeddings dictionary
-            if job_id not in job_embeddings:
-                logger.error(f"Failed to generate embedding for job {job_id}")
-                return resumes
-            
-            # Get the job embedding, ensuring it's a valid object
-            job_embedding = job_embeddings.get(job_id)
-            if job_embedding is None:
-                logger.error(f"No embedding for job {job_id}")
-                return resumes
-                
+            if job.embedding is None or job.embedding_updated_at is None:
+                logger.info(f"Job {job_id} is missing embedding or timestamp. Generating embedding.")
+                job_embeddings = await self.embedding_manager.update_job_embeddings(db, [job_id])
+                logger.debug(f"Job embeddings: {job_embeddings}")
+                job_embedding = job_embeddings.get(job_id)
+                if job_embedding is None:
+                    logger.error(f"Failed to generate embedding for job {job_id}")
+                    return resumes
+            else:
+                logger.info(f"Using existing embedding for job {job_id}")
+                job_embedding = job.embedding
+
             # Log embedding type and shape for debugging
             logger.debug(f"Job embedding type: {type(job_embedding)}")
             if isinstance(job_embedding, np.ndarray):
@@ -112,7 +108,9 @@ class RankingService:
                     # Calculate similarity
                     similarity = self.embedding_service.compute_similarity(resume_embedding, job_embedding)
                     logger.debug(f"Resume {resume.id} similarity: {similarity}")
-                    
+                     
+                    logger.info(f"Ranked resume {resume.id} with similarity {similarity}")
+
                     scored_resumes.append((resume, similarity))
                     
                 except Exception as e:
@@ -157,7 +155,6 @@ class RankingService:
                     skill_score = min(skill_matches / len(skills), 1.0)
                     score += skill_score * top_skills_weight
             
-            # Simple scoring for education and experience
             if hasattr(resume, 'education') and resume.education:
                 score += education_weight
                 
@@ -169,5 +166,4 @@ class RankingService:
         # Sort by score (descending)
         scored_resumes.sort(key=lambda x: x[1], reverse=True)
         
-        # Return sorted resumes
         return [resume for resume, _ in scored_resumes]
