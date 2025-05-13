@@ -11,7 +11,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = logging.getLogger(__name__)
 
 class EmbeddingService:
-    """Service for generating embeddings using Azure OpenAI."""
     
     def __init__(self):
         self.client = AsyncAzureOpenAI(
@@ -25,15 +24,7 @@ class EmbeddingService:
         
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=30))
     async def generate_embedding(self, text: str) -> List[float]:
-        """
-        Generate embedding for a single text using Azure OpenAI API.
         
-        Args:
-            text: Text to generate embedding for
-            
-        Returns:
-            List of floats representing the embedding vector
-        """
         if not text or not text.strip():
             logger.warning("Empty text provided for embedding generation")
             # Return zero vector with correct dimensionality
@@ -56,16 +47,7 @@ class EmbeddingService:
             raise
     
     async def generate_embeddings_batch(self, texts: List[str], batch_size: int = 20) -> List[List[float]]:
-        """
-        Generate embeddings for multiple texts in batches.
         
-        Args:
-            texts: List of texts to generate embeddings for
-            batch_size: Number of texts to process in each batch
-            
-        Returns:
-            List of embedding vectors
-        """
         results = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
@@ -78,16 +60,7 @@ class EmbeddingService:
         return results
             
     def compute_similarity(self, embedding1: Union[List[float], np.ndarray], embedding2: Union[List[float], np.ndarray]) -> float:
-        """
-        Compute cosine similarity between two embeddings.
         
-        Args:
-            embedding1: First embedding vector
-            embedding2: Second embedding vector
-            
-        Returns:
-            Cosine similarity score (0-1)
-        """
         try:
             # Check for empty or None embeddings
             if embedding1 is None or embedding2 is None:

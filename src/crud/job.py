@@ -14,7 +14,6 @@ def create_job(db: Session, job: JobCreate, user_id: int, background_tasks: Back
         parser = TextParser()
         job_metadata = parser.parse_text(job.description, parse_type="job")
         
-        
 
         db_job = Job(
             title=job.title,

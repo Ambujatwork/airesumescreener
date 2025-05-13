@@ -13,7 +13,6 @@ from src.database_mongo import resumes_collection
 logger = logging.getLogger(__name__)
 
 class EmbeddingManager:
-    """Manager for handling embedding generation and updates for resumes and jobs"""
     
     def __init__(self):
         self.embedding_service = EmbeddingService()
@@ -93,7 +92,6 @@ class EmbeddingManager:
         return results
         
     def _prepare_resume_text_for_embedding(self, resume: Resume) -> str:
-        """Construct embedding text from Postgres Resume fields"""
         text_parts = []
         
         # Candidate info
@@ -126,15 +124,7 @@ class EmbeddingManager:
         return "\n\n".join(text_parts)
     
     def _prepare_job_text_for_embedding(self, job: Job) -> str:
-        """
-        Prepare job description text for embedding by combining structured and unstructured data.
         
-        Args:
-            job: Job model object
-            
-        Returns:
-            Formatted text for embedding
-        """
         text_parts = []
         
         # Add job title and role
@@ -172,7 +162,6 @@ class EmbeddingManager:
         return "\n\n".join(text_parts)
     
     def _format_education(self, education_data) -> str:
-        """Format education data into a string"""
         if isinstance(education_data, list):
             education_items = []
             for edu in education_data:
@@ -200,7 +189,6 @@ class EmbeddingManager:
         return str(education_data)
     
     def _format_experience(self, experience_data) -> str:
-        """Format experience data into a string"""
         if isinstance(experience_data, list):
             experience_items = []
             for exp in experience_data:

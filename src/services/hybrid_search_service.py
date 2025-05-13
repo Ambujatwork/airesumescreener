@@ -223,10 +223,7 @@ class HybridSearchService:
         return parsed_query
 
     def _keyword_search(self, db: Session, parsed_query: Dict[str, Any], user_id: int, folder_id: Optional[int] = None) -> Dict[int, float]:
-        """
-        Improved keyword-based search using parsed query components.
-        Returns a dictionary of resume_id -> normalized score
-        """
+       
         try:
             resume_scores = {}
             
@@ -510,7 +507,6 @@ class HybridSearchService:
 
     def _combine_scores(self, keyword_scores: Dict[int, float], semantic_scores: Dict[int, float], 
                        location_scores: Dict[int, float]) -> Dict[int, float]:
-        """Combine scores with dynamic weighting based on query characteristics."""
         combined_scores = {}
 
         # Get all unique resume IDs from all score sets
@@ -551,9 +547,7 @@ class HybridSearchService:
 
     async def search_resumes(self, db: Session, query: str, user_id: int, folder_id: Optional[int] = None,
                limit: int = 10, query_location: str = "") -> List[Tuple[ResumeModel, float]]:
-        """
-        Main search method that combines keyword, semantic, and location-based searches.
-        """
+       
         try:
             # Prepare query
             query = query.strip()
@@ -611,9 +605,7 @@ class HybridSearchService:
                 
     def search_by_job(self, db: Session, job_id: int, user_id: int, folder_id: Optional[int] = None,
                       limit: int = 10) -> List[Tuple[ResumeModel, float]]:
-        """
-        Search for resumes matching a specific job using semantic job matching.
-        """
+        
         try:
             # Fetch the job
             job = db.query(JobModel).filter(JobModel.id == job_id, JobModel.user_id == user_id).first()
